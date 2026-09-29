@@ -9,6 +9,8 @@ to prevent concurrent rounds.
 
 import asyncio
 import logging
+from collections.abc import Callable
+from typing import TypeVar
 from datetime import datetime, timedelta, timezone
 
 from scoring_service.config import settings
@@ -161,6 +163,34 @@ def _release_lock(conn) -> None:
     release_advisory_lock(conn, ADVISORY_LOCK_ID)
 
 
+_WorkerResult = TypeVar("_WorkerResult")
+
+
+async def _run_worker_to_completion(work: Callable[[], _WorkerResult]) -> _WorkerResult:
+    """Keep the caller's session lock until a synchronous worker has stopped.
+
+    Cancelling to_thread's await does not stop its thread. Shield and drain
+    the worker before propagating cancellation, including repeated shutdown
+    cancellation, so the scheduler's finally block cannot unlock early.
+    """
+    worker = asyncio.create_task(asyncio.to_thread(work))
+    try:
+        return await asyncio.shield(worker)
+    except asyncio.CancelledError:
+        while not worker.done():
+            try:
+                await asyncio.shield(worker)
+            except asyncio.CancelledError:
+                continue
+            except Exception:
+                break
+        try:
+            worker.result()
+        except Exception:
+            logger.exception("Scheduler worker failed while cancellation was draining")
+        raise
+
+
 async def scheduler_loop(orchestrator: ScoringOrchestrator | None = None):
     """Background loop that triggers scoring rounds on schedule.
 
@@ -194,7 +224,7 @@ async def scheduler_loop(orchestrator: ScoringOrchestrator | None = None):
                 else:
                     lock_acquired = True
 
-                    publication_results = await asyncio.to_thread(
+                    publication_results = await _run_worker_to_completion(
                         orchestrator.publish_due_rounds
                     )
                     if publication_results:
@@ -206,7 +236,7 @@ async def scheduler_loop(orchestrator: ScoringOrchestrator | None = None):
                     if _is_round_due(conn):
                         logger.info("Triggering scheduled scoring round")
                         _advance_schedule(conn)
-                        result = await asyncio.to_thread(orchestrator.run_round)
+                        result = await _run_worker_to_completion(orchestrator.run_round)
                         logger.info(
                             "Scheduled round finished: status=%s, round_number=%s",
                             result.get("status"),
