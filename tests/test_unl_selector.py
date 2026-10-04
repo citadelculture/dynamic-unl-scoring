@@ -137,6 +137,18 @@ class TestChurnControl:
         assert result.unl == ["CHL"]
         assert result.alternates == ["INC"]
 
+    def test_challenger_displaces_lowest_ranked_equal_score_incumbent(self):
+        """The lexicographically later tied incumbent is weakest."""
+        result = select_unl(
+            _result([("A", 50), ("B", 50), ("C", 55)]),
+            previous_unl=["A", "B"],
+            cutoff=40,
+            max_size=2,
+            min_gap=5,
+        )
+        assert result.unl == ["C", "A"]
+        assert result.alternates == ["B"]
+
     def test_incumbent_below_cutoff_loses_protection(self):
         """Incumbency does not protect against the cutoff threshold."""
         result = select_unl(
