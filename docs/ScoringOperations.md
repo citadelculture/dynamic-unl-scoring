@@ -423,12 +423,13 @@ environment at a time, devnet first:
 
    ```bash
    python scripts/check_minimum_safe_version.py \
-     validator_evidence.json --minimum 1.0.9
+     validator_evidence.json --network devnet --minimum 1.0.9
    ```
 
    Exit 0 reports `ready`; exit 1 reports `blocked` and names every older or
    unreadable foundation validator; exit 2 refuses malformed or incomplete
-   evidence. Preserve the canonical JSON output with the public artifact URL.
+   evidence, an environment mismatch, or an unverified foundation identity.
+   Preserve the canonical JSON output with the public artifact URL.
 2. Change `MINIMUM_SAFE_VERSION` in
    `.github/workflows/deploy-devnet.yml` and
    `.github/workflows/deploy-testnet.yml`, and in the `.env.devnet` /

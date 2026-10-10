@@ -32,6 +32,7 @@ class PreflightError(ValueError):
 def evaluate(
     payload: Any,
     minimum_text: str,
+    expected_network: str,
     foundation_domain: str = "postfiat.org",
 ) -> dict[str, Any]:
     minimum = parse_release_version(minimum_text)
@@ -46,6 +47,10 @@ def evaluate(
     validators = payload.get("validators")
     if not isinstance(network, str) or not network:
         raise PreflightError("evidence.network must be a non-empty string")
+    if network != expected_network:
+        raise PreflightError(
+            f"evidence network {network!r} does not match target {expected_network!r}"
+        )
     if not isinstance(round_number, int) or isinstance(round_number, bool):
         raise PreflightError("evidence.round_number must be an integer")
     if not isinstance(snapshot_timestamp, str) or not snapshot_timestamp:
@@ -58,7 +63,10 @@ def evaluate(
     for index, validator in enumerate(validators):
         if not isinstance(validator, dict):
             raise PreflightError(f"evidence.validators[{index}] must be an object")
-        if validator.get("domain") != foundation_domain:
+        if (
+            validator.get("domain") != foundation_domain
+            or validator.get("domain_verified") is not True
+        ):
             continue
         master_key = validator.get("master_key")
         if not isinstance(master_key, str) or not master_key:
@@ -107,12 +115,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("evidence", type=Path)
     parser.add_argument("--minimum", required=True)
+    parser.add_argument("--network", required=True)
     parser.add_argument("--foundation-domain", default="postfiat.org")
     args = parser.parse_args()
 
     try:
         payload = json.loads(args.evidence.read_text())
-        result = evaluate(payload, args.minimum, args.foundation_domain)
+        result = evaluate(
+            payload,
+            args.minimum,
+            args.network,
+            args.foundation_domain,
+        )
     except (OSError, json.JSONDecodeError, PreflightError) as exc:
         print(
             json.dumps(
