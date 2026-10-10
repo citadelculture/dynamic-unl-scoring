@@ -418,7 +418,17 @@ environment at a time, devnet first:
    validator in the target environment reports the new version or newer. The
    latest normal round's `inputs/validator_evidence.json` is the public
    preflight record; a missing, stale, or older foundation version blocks the
-   promotion.
+   promotion. Save that artifact and run the same version ordering used by the
+   collector:
+
+   ```bash
+   python scripts/check_minimum_safe_version.py \
+     validator_evidence.json --minimum 1.0.9
+   ```
+
+   Exit 0 reports `ready`; exit 1 reports `blocked` and names every older or
+   unreadable foundation validator; exit 2 refuses malformed or incomplete
+   evidence. Preserve the canonical JSON output with the public artifact URL.
 2. Change `MINIMUM_SAFE_VERSION` in
    `.github/workflows/deploy-devnet.yml` and
    `.github/workflows/deploy-testnet.yml`, and in the `.env.devnet` /
