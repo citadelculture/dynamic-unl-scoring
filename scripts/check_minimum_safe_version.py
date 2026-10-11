@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -33,7 +35,9 @@ def evaluate(
     payload: Any,
     minimum_text: str,
     expected_network: str,
+    max_age_hours: float,
     foundation_domain: str = "postfiat.org",
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     minimum = parse_release_version(minimum_text)
     if minimum is None:
@@ -55,6 +59,20 @@ def evaluate(
         raise PreflightError("evidence.round_number must be an integer")
     if not isinstance(snapshot_timestamp, str) or not snapshot_timestamp:
         raise PreflightError("evidence.snapshot_timestamp must be a non-empty string")
+    if not math.isfinite(max_age_hours) or max_age_hours <= 0:
+        raise PreflightError("max age hours must be a positive finite number")
+    try:
+        snapshot_at = datetime.fromisoformat(snapshot_timestamp.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise PreflightError("evidence.snapshot_timestamp must be ISO 8601") from exc
+    if snapshot_at.tzinfo is None:
+        raise PreflightError("evidence.snapshot_timestamp must include a timezone")
+    current_time = now or datetime.now(timezone.utc)
+    if current_time.tzinfo is None:
+        raise PreflightError("current time must include a timezone")
+    age_hours = (current_time - snapshot_at).total_seconds() / 3600
+    if age_hours < -(5 / 60):
+        raise PreflightError("evidence.snapshot_timestamp is more than 5 minutes ahead")
     if not isinstance(validators, list):
         raise PreflightError("evidence.validators must be an array")
 
@@ -84,6 +102,14 @@ def evaluate(
         )
 
     blockers = []
+    if age_hours > max_age_hours:
+        blockers.append(
+            {
+                "code": "evidence_stale",
+                "ageHours": round(age_hours, 6),
+                "maxAgeHours": max_age_hours,
+            }
+        )
     versions: Counter[str] = Counter()
     for validator in sorted(foundation, key=lambda item: item["master_key"]):
         version = validator.get("server_version")
@@ -103,6 +129,8 @@ def evaluate(
         "network": network,
         "roundNumber": round_number,
         "snapshotTimestamp": snapshot_timestamp,
+        "evidenceAgeHours": round(max(age_hours, 0), 6),
+        "maxAgeHours": max_age_hours,
         "minimumSafeVersion": minimum_text,
         "foundationDomain": foundation_domain,
         "foundationValidatorCount": len(foundation),
@@ -116,6 +144,7 @@ def main() -> int:
     parser.add_argument("evidence", type=Path)
     parser.add_argument("--minimum", required=True)
     parser.add_argument("--network", required=True)
+    parser.add_argument("--max-age-hours", required=True, type=float)
     parser.add_argument("--foundation-domain", default="postfiat.org")
     args = parser.parse_args()
 
@@ -125,6 +154,7 @@ def main() -> int:
             payload,
             args.minimum,
             args.network,
+            args.max_age_hours,
             args.foundation_domain,
         )
     except (OSError, json.JSONDecodeError, PreflightError) as exc:
