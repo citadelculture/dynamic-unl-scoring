@@ -36,6 +36,7 @@ def evaluate(
     minimum_text: str,
     expected_network: str,
     max_age_hours: float,
+    expected_foundation_count: int,
     foundation_domain: str = "postfiat.org",
     now: datetime | None = None,
 ) -> dict[str, Any]:
@@ -61,6 +62,12 @@ def evaluate(
         raise PreflightError("evidence.snapshot_timestamp must be a non-empty string")
     if not math.isfinite(max_age_hours) or max_age_hours <= 0:
         raise PreflightError("max age hours must be a positive finite number")
+    if (
+        not isinstance(expected_foundation_count, int)
+        or isinstance(expected_foundation_count, bool)
+        or expected_foundation_count <= 0
+    ):
+        raise PreflightError("expected foundation count must be a positive integer")
     try:
         snapshot_at = datetime.fromisoformat(snapshot_timestamp.replace("Z", "+00:00"))
     except ValueError as exc:
@@ -99,6 +106,11 @@ def evaluate(
     if not foundation:
         raise PreflightError(
             f"no foundation validators matched domain {foundation_domain!r}"
+        )
+    if len(foundation) != expected_foundation_count:
+        raise PreflightError(
+            "foundation validator count "
+            f"{len(foundation)} does not match expected {expected_foundation_count}"
         )
 
     blockers = []
@@ -145,6 +157,7 @@ def main() -> int:
     parser.add_argument("--minimum", required=True)
     parser.add_argument("--network", required=True)
     parser.add_argument("--max-age-hours", required=True, type=float)
+    parser.add_argument("--expected-foundation-count", required=True, type=int)
     parser.add_argument("--foundation-domain", default="postfiat.org")
     args = parser.parse_args()
 
@@ -155,6 +168,7 @@ def main() -> int:
             args.minimum,
             args.network,
             args.max_age_hours,
+            args.expected_foundation_count,
             args.foundation_domain,
         )
     except (OSError, json.JSONDecodeError, PreflightError) as exc:

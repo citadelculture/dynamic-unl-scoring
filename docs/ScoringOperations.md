@@ -424,14 +424,15 @@ environment at a time, devnet first:
    ```bash
    python scripts/check_minimum_safe_version.py \
      validator_evidence.json --network devnet --minimum 1.0.9 \
-     --max-age-hours 720
+     --max-age-hours 720 --expected-foundation-count 3
    ```
 
    Exit 0 reports `ready`; exit 1 reports `blocked` and names every older or
    unreadable foundation validator, or a snapshot older than the explicit
    maximum age (the example is one devnet cadence plus a two-day buffer).
    Exit 2 refuses malformed or incomplete
-   evidence, an environment mismatch, or an unverified foundation identity.
+   evidence, an environment mismatch, an unverified foundation identity, or a
+   foundation validator count that differs from the operator's expected set.
    Preserve the canonical JSON output with the public artifact URL.
 2. Change `MINIMUM_SAFE_VERSION` in
    `.github/workflows/deploy-devnet.yml` and

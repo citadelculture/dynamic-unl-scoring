@@ -40,6 +40,7 @@ def test_ready_when_every_foundation_validator_meets_minimum():
         "1.0.9",
         "devnet",
         24,
+        3,
         now=NOW,
     )
 
@@ -59,6 +60,7 @@ def test_blocked_result_names_each_old_or_missing_foundation_validator():
         "1.0.9",
         "devnet",
         24,
+        3,
         now=NOW,
     )
 
@@ -87,7 +89,7 @@ def test_blocked_result_names_each_old_or_missing_foundation_validator():
 )
 def test_invalid_evidence_is_refused(payload, minimum, network, max_age, message):
     with pytest.raises(PreflightError, match=message):
-        evaluate(payload, minimum, network, max_age, now=NOW)
+        evaluate(payload, minimum, network, max_age, 1, now=NOW)
 
 
 def test_unverified_foundation_domain_cannot_satisfy_preflight():
@@ -95,7 +97,12 @@ def test_unverified_foundation_domain_cannot_satisfy_preflight():
     payload["validators"][0]["domain_verified"] = False
 
     with pytest.raises(PreflightError, match="no foundation validators"):
-        evaluate(payload, "1.0.9", "devnet", 24, now=NOW)
+        evaluate(payload, "1.0.9", "devnet", 24, 1, now=NOW)
+
+
+def test_partial_foundation_evidence_is_refused():
+    with pytest.raises(PreflightError, match="count 1 does not match expected 3"):
+        evaluate(evidence("1.0.9"), "1.0.9", "devnet", 24, 3, now=NOW)
 
 
 def test_stale_evidence_blocks_even_when_versions_are_ready():
@@ -103,6 +110,7 @@ def test_stale_evidence_blocks_even_when_versions_are_ready():
         evidence("1.0.9"),
         "1.0.9",
         "devnet",
+        1,
         1,
         now=NOW,
     )
