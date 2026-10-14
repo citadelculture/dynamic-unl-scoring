@@ -148,10 +148,11 @@ class PinataClient:
                         headers=headers,
                     )
                     response.raise_for_status()
-                    root_cid = response.json().get("IpfsHash")
+                    result = response.json()
+                    root_cid = result.get("IpfsHash") if isinstance(result, dict) else None
 
-                if not root_cid:
-                    logger.error("Pinata upload response missing IpfsHash")
+                if not isinstance(root_cid, str) or not root_cid:
+                    logger.error("Pinata upload response missing a non-empty string IpfsHash")
                     return None
 
                 logger.info(

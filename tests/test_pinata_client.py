@@ -198,6 +198,48 @@ class TestPinByCid:
 class TestPinDirectory:
     """Direct content upload — the write fallback used when the primary node fails."""
 
+    @pytest.mark.parametrize(
+        "body",
+        [
+            [],
+            None,
+            7,
+            True,
+            "not-an-object",
+            {"IpfsHash": True},
+            {"IpfsHash": 123},
+            {"IpfsHash": ["QmDirCID"]},
+            {"IpfsHash": {"cid": "QmDirCID"}},
+        ],
+    )
+    def test_rejects_malformed_success_responses(self, client, body):
+        """A successful HTTP status cannot make a malformed response a CID."""
+        import json
+
+        requests = []
+        real_client = httpx.Client
+
+        def respond(request):
+            requests.append(request)
+            return httpx.Response(
+                200,
+                content=json.dumps(body).encode(),
+                headers={"content-type": "application/json"},
+            )
+
+        transport = httpx.MockTransport(respond)
+        with patch(
+            "scoring_service.clients.pinata.httpx.Client",
+            side_effect=lambda **kwargs: real_client(
+                transport=transport, trust_env=False, **kwargs
+            ),
+        ):
+            assert client.pin_directory({"bundle.json": b"{}"}) is None
+
+        assert len(requests) == 1
+        assert requests[0].method == "POST"
+        assert str(requests[0].url) == PIN_FILE_URL
+
     @patch("scoring_service.clients.pinata.httpx.Client")
     def test_returns_root_cid_on_success(self, mock_client_cls, client):
         mock_response = MagicMock()
